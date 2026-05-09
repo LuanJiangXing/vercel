@@ -70,5 +70,13 @@
     "description": "flat, green, shruby smallcam, also some farmland and many dirt roads",
     "image": "images/9.png",
     "link": "https://maps.app.goo.gl/MZKqFKWJVsEAe6B19"
+  },
+  {"name": "KuGompo City Green",
+    "nickname": "10",
+    "geojson": {"type": "Polygon",
+        "coordinates": [[[27.5970841, -33.2179204], [27.5539792, -33.0810611], [27.4012327, -33.0036663], [27.4068866, -32.8765954], [27.5833661, -32.8706222], [27.8477567, -32.8900064], [27.8634942, -32.7224579], [28.1022628, -32.7443024], [28.2947161, -32.6275083], [28.4154844, -32.6538472], [27.9842327, -32.9917388], [27.5970841, -33.2179204]]]},
+    "description": "coastal super green smallcam, the range actually can be larger towards north and inland",
+    "image": "images/10.png",
+    "link": "https://maps.app.goo.gl/U2NC5iXoBZQT2nt58"
   }
 ]
