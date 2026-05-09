@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>South Africa RegionGuessing</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      --ink: #1c1917;
+      --muted: #5c5852;
+      --paper: #f6f4f0;
+      --line: #e2ddd6;
+      --accent: #0d6f69;
+      --accent-soft: #5b908a;
+      --card: #fff;
+      --surface-muted: #ebe6df;
+      --surface-hover-card: linear-gradient(152deg, #eef6f4 0%, #e8f0ed 38%, #f2ebe3 100%);
+      --stroke-soft: rgba(28, 25, 23, 0.12);
+      --modal-top: linear-gradient(110deg, #e8f2f0 0%, #ebe4dc 55%, #f4efe6 100%);
+      --modal-body: linear-gradient(180deg, #f0f4f3 0%, #f7f3ec 100%);
+      --modal-surface: linear-gradient(198deg, #e6eeec 0%, #f2ebe4 45%, #faf7f2 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      min-height: 320px;
+    }
+
+    /* 避免点击多边形后出现 SVG 路径焦点矩形框 */
+    .leaflet-container:focus,
+    .leaflet-container:focus-visible {
+      outline: none !important;
+    }
+
+    .leaflet-container .leaflet-overlay-pane svg path.leaflet-interactive:focus,
+    .leaflet-container .leaflet-overlay-pane svg path.leaflet-interactive:focus-visible {
+      outline: none !important;
+    }
+
+    .leaflet-container .leaflet-overlay-pane svg:focus {
+      outline: none !important;
+    }
+
+    .region-hover-shell.leaflet-tooltip {
+      pointer-events: none !important;
+    }
+
+    .region-hover-shell {
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
+    .region-hover-shell::before {
+      display: none;
+    }
+
+    .region-hover-card {
+      max-width: min(320px, 82vw);
+      min-width: min(200px, 72vw);
+      padding: 11px 14px 12px;
+      background: var(--surface-hover-card);
+      border: 1px solid rgba(13, 111, 105, 0.18);
+      border-radius: 11px;
+      border-left: 3px solid rgba(13, 111, 105, 0.55);
+      box-shadow: 0 6px 18px rgba(15, 60, 55, 0.08), 0 2px 6px rgba(28, 25, 23, 0.06);
+      pointer-events: none;
+    }
+
+    .region-hover-card__title {
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.35;
+      color: #1e3d3a;
+      margin-bottom: 7px;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .region-hover-card__desc {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #4a534f;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .map-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.22s ease, visibility 0.22s ease;
+      z-index: 9000;
+    }
+
+    .backdrop.is-open {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .region-nickname-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+
+    .region-nickname-inner {
+      display: inline-block;
+      transform: translate(-50%, -50%);
+      font-weight: 750;
+      line-height: 1;
+      letter-spacing: 0.03em;
+      color: #fffaf5;
+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      user-select: none;
+      transition: opacity 0.12s ease;
+    }
+
+    .modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -48%) scale(0.96);
+      width: min(480px, calc(100vw - 28px));
+      max-height: min(90vh, 680px);
+      overflow: auto;
+      background: var(--modal-surface);
+      border-radius: 14px;
+      border: 1px solid rgba(13, 111, 105, 0.14);
+      box-shadow: 0 22px 52px rgba(20, 45, 42, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.45) inset;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease;
+      z-index: 9001;
+    }
+
+    .modal.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .modal__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 18px 20px 14px;
+      background: var(--modal-top);
+      border-bottom: 1px solid rgba(13, 111, 105, 0.12);
+      border-radius: 14px 14px 0 0;
+    }
+
+    .modal__title {
+      margin: 0;
+      font-size: 1.12rem;
+      font-weight: 650;
+      line-height: 1.35;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      letter-spacing: -0.01em;
+      color: #143633;
+    }
+
+    .modal__close {
+      flex-shrink: 0;
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(13, 111, 105, 0.2);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.55);
+      color: #3d5c57;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+
+    .modal__close:hover {
+      background: rgba(255, 255, 255, 0.85);
+      color: var(--ink);
+    }
+
+    .modal__body {
+      padding: 16px 20px 22px;
+      background: var(--modal-body);
+    }
+
+    .modal__thumb {
+      display: block;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(13, 111, 105, 0.15);
+      margin-bottom: 12px;
+      background: linear-gradient(145deg, #e2e8e6 0%, #ebe4dc 100%);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset, 0 4px 14px rgba(20, 45, 42, 0.08);
+    }
+
+    .modal__thumb img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 300px;
+      min-height: 140px;
+      object-fit: cover;
+      vertical-align: middle;
+    }
+
+    .modal__thumb a {
+      display: block;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .modal__thumb a:focus-visible {
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+
+    .modal__hint {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: #2f5c55;
+      letter-spacing: 0.01em;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(13, 111, 105, 0.08);
+      border: 1px solid rgba(13, 111, 105, 0.12);
+    }
+
+    .modal__desc {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.65;
+      color: #3a3530;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid rgba(90, 70, 50, 0.08);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+    }
+
+    .load-error {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 16px 20px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      max-width: 90%;
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+      z-index: 5000;
+    }
+  </style>
+</head>
+<body>
+  <div class="map-shell">
+    <div id="map" role="application" aria-label="南非区域地图"></div>
+    <div id="load-error" class="load-error" hidden></div>
+  </div>
+
+  <div id="backdrop" class="backdrop" aria-hidden="true"></div>
+  <div
+    id="modal"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-title"
+    aria-hidden="true"
+  >
+    <div class="modal__header">
+      <h2 id="modal-title" class="modal__title"></h2>
+      <button type="button" class="modal__close" id="modal-close" aria-label="关闭">
+        ×
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__thumb" id="modal-thumb-wrap"></div>
+      <p class="modal__hint" id="modal-hint" hidden>
+        Click the image to open the link in a new tab.
+      </p>
+      <p class="modal__desc" id="modal-desc"></p>
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    (function () {
+      const GOLDEN = 0.618033988749895;
+      const SAT = 52;
+      const LIGHT = 48;
+
+      /** 南非及周边海域限制框（西南角 → 东北角） */
+      const SA_MAX_BOUNDS = L.latLngBounds(
+        L.latLng(-35.35, 14.15),
+        L.latLng(-20.85, 36.45)
+      );
+      /** 南非大致地理中心；缩放约可一览全国 */
+      const SA_CENTER = [-28.6, 25.0];
+      const SA_DEFAULT_ZOOM = 5;
+      const SA_MIN_ZOOM = 5;
+
+      function displayTitle(raw) {
+        if (!raw) return "未命名区域";
+        return String(raw).replace(/_/g, " ");
+      }
+
+      /** 每区域：昵称缩放、关闭弹窗时恢复样式与昵称可见性 */
+      const regionViews = [];
+
+      function escapeHtml(text) {
+        if (text == null) return "";
+        const d = document.createElement("div");
+        d.textContent = String(text);
+        return d.innerHTML;
+      }
+
+      /** 非空才显示；省略或 "" 表示不显示昵称标签 */
+      function nicknameDisplayText(item) {
+        if (item.nickname == null) return "";
+        const s = String(item.nickname).trim();
+        return s;
+      }
+
+      function nicknameFontPx(bounds, map) {
+        if (!bounds || !bounds.isValid()) return 14;
+        const sw = map.latLngToLayerPoint(bounds.getSouthWest());
+        const ne = map.latLngToLayerPoint(bounds.getNorthEast());
+        const w = Math.max(1, Math.abs(ne.x - sw.x));
+        const h = Math.max(1, Math.abs(ne.y - sw.y));
+        const d = Math.min(w, h);
+        return Math.round(Math.max(11, Math.min(26, d * 0.112)));
+      }
+
+      function makeNicknameDivIcon(text, fontPx) {
+        return L.divIcon({
+          className: "region-nickname-marker",
+          html:
+            '<span class="region-nickname-inner" style="font-size:' +
+            fontPx +
+            "px\">" +
+            escapeHtml(text) +
+            "</span>",
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
+      }
+
+      function syncNicknameSizes() {
+        regionViews.forEach(function (entry) {
+          if (!entry.nickMarker || !entry.map || !entry.getBounds) return;
+          const b = entry.getBounds();
+          if (!b || !b.isValid()) return;
+          const px = nicknameFontPx(b, entry.map);
+          entry.nickMarker.setIcon(makeNicknameDivIcon(entry.text, px));
+        });
+      }
+
+      function resetRegionHoverUi() {
+        regionViews.forEach(function (entry) {
+          if (entry.layer && entry.baseStyle) {
+            entry.layer.eachLayer(function (lyr) {
+              lyr.setStyle(entry.baseStyle);
+            });
+          }
+          if (entry.nickMarker && entry.nickMarker.getElement()) {
+            entry.nickMarker.getElement().style.opacity = "1";
+          }
+        });
+      }
+
+      function buildHoverTooltipContent(item) {
+        const wrap = document.createElement("div");
+        wrap.className = "region-hover-card";
+        const titleEl = document.createElement("div");
+        titleEl.className = "region-hover-card__title";
+        titleEl.textContent = displayTitle(item.name);
+        wrap.appendChild(titleEl);
+        const desc = (item.description && String(item.description).trim()) || "";
+        if (desc) {
+          const p = document.createElement("p");
+          p.className = "region-hover-card__desc";
+          p.textContent = desc;
+          wrap.appendChild(p);
+        }
+        return wrap;
+      }
+
+      function hashString(s) {
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      }
+
+      function regionColor(name, index) {
+        const seed = hashString(String(name || "")) + index * 2654435761;
+        const hue = (seed * GOLDEN) % 360;
+        const fill = `hsl(${hue}, ${SAT}%, ${LIGHT}%)`;
+        const stroke = `hsl(${hue}, ${Math.min(68, SAT + 10)}%, ${Math.max(26, LIGHT - 20)}%)`;
+        return { fill, stroke };
+      }
+
+      function normalizeRecords(raw) {
+        if (Array.isArray(raw)) return raw;
+        if (raw && Array.isArray(raw.regions)) return raw.regions;
+        if (raw && Array.isArray(raw.items)) return raw.items;
+        if (raw && raw.geojson) return [raw];
+        if (raw && raw.type === "FeatureCollection" && Array.isArray(raw.features)) {
+          return raw.features.map(function (f) {
+            const p = f.properties || {};
+            return {
+              name: p.name,
+              nickname: p.nickname,
+              geojson: f.geometry,
+              description: p.description,
+              image: p.image,
+              link: p.link,
+            };
+          });
+        }
+        return [];
+      }
+
+      function geometryLayer(geo) {
+        if (!geo || !geo.type) return null;
+        if (geo.type === "FeatureCollection") return geo;
+        return { type: "Feature", properties: {}, geometry: geo };
+      }
+
+      const backdrop = document.getElementById("backdrop");
+      const modal = document.getElementById("modal");
+      const modalTitle = document.getElementById("modal-title");
+      const modalDesc = document.getElementById("modal-desc");
+      const modalThumbWrap = document.getElementById("modal-thumb-wrap");
+      const modalHint = document.getElementById("modal-hint");
+      const loadError = document.getElementById("load-error");
+
+      let map;
+
+      function openModal(item) {
+        if (document.activeElement && typeof document.activeElement.blur === "function") {
+          document.activeElement.blur();
+        }
+        if (map && map.getContainer) {
+          map.getContainer().blur();
+        }
+        modalTitle.textContent = displayTitle(item.name);
+        modalDesc.textContent = item.description || "暂无描述。";
+
+        modalThumbWrap.innerHTML = "";
+        const link = item.link && String(item.link).trim();
+        const imgSrc = item.image && String(item.image).trim();
+
+        if (imgSrc) {
+          const img = document.createElement("img");
+          img.src = imgSrc;
+          img.alt = displayTitle(item.name);
+          img.loading = "lazy";
+          if (link) {
+            const a = document.createElement("a");
+            a.href = link;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.appendChild(img);
+            modalThumbWrap.appendChild(a);
+            modalHint.hidden = false;
+          } else {
+            modalThumbWrap.appendChild(img);
+            modalHint.hidden = true;
+          }
+        } else {
+          modalHint.hidden = true;
+        }
+
+        backdrop.classList.add("is-open");
+        modal.classList.add("is-open");
+        backdrop.setAttribute("aria-hidden", "false");
+        modal.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeModal() {
+        backdrop.classList.remove("is-open");
+        modal.classList.remove("is-open");
+        backdrop.setAttribute("aria-hidden", "true");
+        modal.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        resetRegionHoverUi();
+      }
+
+      document.getElementById("modal-close").addEventListener("click", closeModal);
+      backdrop.addEventListener("click", closeModal);
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && modal.classList.contains("is-open")) closeModal();
+      });
+
+      fetch("data.json")
+        .then(function (r) {
+          if (!r.ok) throw new Error("无法加载 data.json（HTTP " + r.status + "）");
+          return r.json();
+        })
+        .then(function (raw) {
+          const records = normalizeRecords(raw);
+          if (!records.length) {
+            throw new Error("data.json 中没有可用的区域数据");
+          }
+
+          map = L.map("map", {
+            zoomControl: true,
+            attributionControl: true,
+            center: SA_CENTER,
+            zoom: SA_DEFAULT_ZOOM,
+            minZoom: SA_MIN_ZOOM,
+            maxBounds: SA_MAX_BOUNDS,
+            maxBoundsViscosity: 1.0,
+          });
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            minZoom: SA_MIN_ZOOM,
+            maxZoom: 19,
+            noWrap: true,
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          }).addTo(map);
+
+          records.forEach(function (item, index) {
+            const geom = item.geojson;
+            const gj = geometryLayer(geom);
+            if (!gj) return;
+
+            const colors = regionColor(item.name, index);
+            const baseStyle = {
+              fillColor: colors.fill,
+              color: colors.stroke,
+              weight: 2,
+              fillOpacity: 0.52,
+              opacity: 0.92,
+            };
+            const hoverStyle = {
+              fillColor: colors.fill,
+              color: colors.stroke,
+              weight: 3.6,
+              fillOpacity: 0.68,
+              opacity: 1,
+            };
+
+            const layer = L.geoJSON(gj, {
+              style: function () {
+                return Object.assign({}, baseStyle);
+              },
+            }).addTo(map);
+
+            const nick = nicknameDisplayText(item);
+            let nickMarker = null;
+            const polyBounds = layer.getBounds();
+            if (nick && polyBounds.isValid()) {
+              const initPx = nicknameFontPx(polyBounds, map);
+              nickMarker = L.marker(polyBounds.getCenter(), {
+                icon: makeNicknameDivIcon(nick, initPx),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 450,
+              }).addTo(map);
+            }
+
+            regionViews.push({
+              nickMarker: nickMarker,
+              map: map,
+              getBounds: function () {
+                return layer.getBounds();
+              },
+              text: nick,
+              layer: layer,
+              baseStyle: baseStyle,
+            });
+
+            layer.eachLayer(function (lyr) {
+              lyr.on("mouseover", function () {
+                lyr.setStyle(hoverStyle);
+                if (nickMarker && nickMarker.getElement()) {
+                  nickMarker.getElement().style.opacity = "0";
+                }
+              });
+              lyr.on("mouseout", function () {
+                lyr.setStyle(baseStyle);
+                if (nickMarker && nickMarker.getElement()) {
+                  nickMarker.getElement().style.opacity = "1";
+                }
+              });
+              lyr.on("click", function (e) {
+                L.DomEvent.stopPropagation(e);
+                if (document.activeElement && typeof document.activeElement.blur === "function") {
+                  document.activeElement.blur();
+                }
+                map.getContainer().blur();
+                openModal(item);
+              });
+              lyr.bindTooltip(buildHoverTooltipContent(item), {
+                direction: "top",
+                sticky: true,
+                opacity: 1,
+                className: "region-hover-shell",
+              });
+            });
+          });
+
+          map.on("zoomend moveend", syncNicknameSizes);
+          syncNicknameSizes();
+        })
+        .catch(function (err) {
+          loadError.hidden = false;
+          loadError.textContent =
+            (err && err.message) || "加载失败，请通过本地静态服务器打开本页（避免 file:// 限制）。";
+        });
+    })();
+  </script>
+</body>
+</html>
